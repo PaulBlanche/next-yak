@@ -60,6 +60,11 @@ pub struct Config {
   pub base_path: String,
   /// Prefix for the generated css identifier
   pub prefix: Option<String>,
+  /// Improves react DevTools experience by setting displayName
+  /// on the component to match the original component name.
+  /// Disabled by default.
+  #[serde(default)]
+  pub display_names: bool,
 }
 
 pub struct TransformVisitor<GenericComments>
@@ -104,6 +109,9 @@ where
   css_module_identifier: Option<Ident>,
   /// Flag to check if we are inside a css attribute
   inside_element_with_css_attribute: bool,
+  /// If true, additional code will be injected to provide readable `displayName` values
+  /// in React DevTools and stack traces for every yak component
+  display_names: bool,
 }
 
 impl<GenericComments> TransformVisitor<GenericComments>
@@ -115,6 +123,7 @@ where
     filename: impl AsRef<str>,
     dev_mode: bool,
     prefix: Option<String>,
+    display_names: bool,
   ) -> Self {
     Self {
       current_css_state: None,
@@ -131,6 +140,7 @@ where
       inside_element_with_css_attribute: false,
       filename: filename.as_ref().into(),
       comments,
+      display_names: display_names,
     }
   }
 
@@ -773,9 +783,13 @@ where
 
     let mut transform: Box<dyn YakTransform> = match yak_library_function_name.deref() {
       // Styled Components transform works only on top level
-      "styled" if is_top_level => Box::new(TransformStyled::new()),
+      "styled" if is_top_level => Box::new(TransformStyled::new(
+        &mut self.naming_convention,
+        current_variable_id.clone(),
+        self.display_names,
+      )),
       // Keyframes transform works only on top level
-      "keyframes" if is_top_level => Box::new(TransformKeyframes::new(
+      "keyframes" if is_top_level => Box::new(TransformKeyframes::with_animation_name(
         self
           .variable_name_selector_mapping
           .get(&current_variable_id)
@@ -788,11 +802,17 @@ where
       )),
       // CSS Mixin e.g. const highlight = css`color: red;`
       "css" if is_top_level => Box::new(TransformCssMixin::new(
+        &mut self.naming_convention,
+        current_variable_id.clone(),
         self.current_exported,
         self.inside_element_with_css_attribute,
       )),
       // CSS Inline mixin e.g. styled.button`${() => css`color: red;`}`
-      "css" => Box::new(TransformNestedCss::new(self.current_condition.clone())),
+      "css" => Box::new(TransformNestedCss::new(
+        &mut self.naming_convention,
+        &current_variable_id,
+        self.current_condition.clone(),
+      )),
       _ => {
         if !is_top_level {
           HANDLER.with(|handler| {
@@ -818,11 +838,7 @@ where
     //
     // Depending on the library function used (styled, keyframes, css, ...)
     // a surrounding scope is added
-    let css_state = Some(transform.create_css_state(
-      &mut self.naming_convention,
-      &current_variable_id,
-      self.current_css_state.clone(),
-    ));
+    let css_state = Some(transform.create_css_state(self.current_css_state.clone()));
 
     if let Some(css_reference_name) = transform.get_css_reference_name() {
       self
@@ -993,6 +1009,7 @@ pub fn process_transform(program: Program, metadata: TransformPluginProgramMetad
     deterministic_path,
     config.dev_mode,
     config.prefix,
+    config.display_names,
   )))
 }
 
@@ -1032,6 +1049,7 @@ mod tests {
           "path/input.tsx",
           true,
           None,
+          true,
         ))
       },
       &input,
@@ -1057,6 +1075,7 @@ mod tests {
           "path/input.tsx",
           false,
           None,
+          false,
         ))
       },
       &input,
