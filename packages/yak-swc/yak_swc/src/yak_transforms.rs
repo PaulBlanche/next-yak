@@ -3,7 +3,7 @@ use rustc_hash::FxHashMap;
 use swc_core::atoms::Atom;
 use swc_core::common::util::move_map::MoveMap;
 
-use crate::utils::ast_helper::{create_member_prop_from_string, expr_hash_map_to_object};
+use crate::utils::ast_helper::expr_hash_map_to_object;
 use crate::utils::encode_module_import::encode_percent;
 use crate::variable_visitor::ScopedVariableReference;
 use crate::yak_imports::YakImports;
@@ -38,7 +38,6 @@ pub trait YakTransform {
   fn transform_expression(
     &mut self,
     expression: &mut TaggedTpl,
-    css_module_identifier: Ident,
     runtime_expressions: Vec<Expr>,
     declarations: &[Declaration],
     runtime_css_variables: FxHashMap<String, Expr>,
@@ -65,7 +64,7 @@ impl TransformNestedCss {
     condition: Vec<String>,
   ) -> TransformNestedCss {
     let condition_concatenated = condition.as_slice().join("-and-");
-    let class_name = naming_convention.generate_unique_name(&format!(
+    let class_name = naming_convention.get_css_variable_name(&format!(
       "{}__{}",
       declaration_name.to_readable_string(),
       condition_concatenated
@@ -80,7 +79,7 @@ impl YakTransform for TransformNestedCss {
     let mut parser_state = previous_parser_state.clone().unwrap();
     // The first scope is the class name which gets attached to the element
     parser_state.current_scopes[0] = CssScope {
-      name: format!(".{}", self.class_name),
+      name: format!(":global(.{})", self.class_name),
       scope_type: ScopeType::Selector,
     };
     parser_state
@@ -89,7 +88,6 @@ impl YakTransform for TransformNestedCss {
   fn transform_expression(
     &mut self,
     expression: &mut TaggedTpl,
-    css_module_identifier: Ident,
     runtime_expressions: Vec<Expr>,
     declarations: &[Declaration],
     runtime_css_variables: FxHashMap<String, Expr>,
@@ -98,11 +96,12 @@ impl YakTransform for TransformNestedCss {
     let mut arguments: Vec<ExprOrSpread> = vec![];
     if !declarations.is_empty() {
       arguments.push(
-        Expr::Member(MemberExpr {
+        // As yak generates the final class name, this name can use it directly in the js code
+        Expr::Lit(Lit::Str(Str {
           span: DUMMY_SP,
-          obj: Box::new(Expr::Ident(css_module_identifier.clone())),
-          prop: create_member_prop_from_string(&self.class_name),
-        })
+          value: self.class_name.clone().into(),
+          raw: None,
+        }))
         .into(),
       );
     }
@@ -142,7 +141,7 @@ pub struct TransformCssMixin {
   export_name: ScopedVariableReference,
   is_exported: bool,
   is_within_jsx_attribute: bool,
-  generated_class_name: String,
+  class_name: String,
 }
 
 impl TransformCssMixin {
@@ -152,13 +151,13 @@ impl TransformCssMixin {
     is_exported: bool,
     is_within_jsx_attribute: bool,
   ) -> TransformCssMixin {
-    let generated_class_name =
-      naming_convention.generate_unique_name_for_variable(&declaration_name);
+    let class_name =
+      naming_convention.get_css_variable_name(&declaration_name.to_readable_string());
     TransformCssMixin {
       export_name: declaration_name,
       is_exported,
       is_within_jsx_attribute,
-      generated_class_name,
+      class_name,
     }
   }
 }
@@ -166,9 +165,8 @@ impl TransformCssMixin {
 impl YakTransform for TransformCssMixin {
   fn create_css_state(&self, _previous_parser_state: Option<ParserState>) -> ParserState {
     let mut parser_state = ParserState::new();
-    // TODO: Remove the unused scope once nested mixins work again
     parser_state.current_scopes = vec![CssScope {
-      name: format!(".{}", self.generated_class_name),
+      name: format!(":global(.{})", self.class_name),
       scope_type: ScopeType::AtRule,
     }];
     parser_state
@@ -177,7 +175,6 @@ impl YakTransform for TransformCssMixin {
   fn transform_expression(
     &mut self,
     expression: &mut TaggedTpl,
-    css_module_identifier: Ident,
     runtime_expressions: Vec<Expr>,
     declarations: &[Declaration],
     runtime_css_variables: FxHashMap<String, Expr>,
@@ -212,11 +209,11 @@ impl YakTransform for TransformCssMixin {
     let css_prefix = if self.is_within_jsx_attribute {
       // Add the class name to the arguments, to be created by the CSS loader
       arguments.push(
-        Expr::Member(MemberExpr {
+        Expr::Lit(Lit::Str(Str {
           span: DUMMY_SP,
-          obj: Box::new(Expr::Ident(css_module_identifier.clone())),
-          prop: create_member_prop_from_string(&self.generated_class_name),
-        })
+          value: self.class_name.as_str().into(),
+          raw: None,
+        }))
         .into(),
       );
       Some("YAK Extracted CSS:".to_string())
@@ -257,9 +254,10 @@ impl YakTransform for TransformCssMixin {
 
   fn get_css_reference_name(&self) -> Option<String> {
     if self.is_within_jsx_attribute {
-      return Some(self.generated_class_name.clone());
+      Some(self.class_name.clone())
+    } else {
+      None
     }
-    None
   }
 }
 
@@ -278,7 +276,8 @@ impl TransformStyled {
     declaration_name: ScopedVariableReference,
     assign_display_name: bool,
   ) -> TransformStyled {
-    let class_name = naming_convention.generate_unique_name_for_variable(&declaration_name);
+    let class_name =
+      naming_convention.get_css_variable_name(&declaration_name.to_readable_string());
     TransformStyled {
       class_name,
       declaration_name,
@@ -413,7 +412,7 @@ impl YakTransform for TransformStyled {
   fn create_css_state(&self, _previous_parser_state: Option<ParserState>) -> ParserState {
     let mut parser_state = ParserState::new();
     parser_state.current_scopes = vec![CssScope {
-      name: format!(".{}", self.class_name),
+      name: format!(":global(.{})", self.class_name),
       scope_type: ScopeType::AtRule,
     }];
     parser_state
@@ -422,7 +421,6 @@ impl YakTransform for TransformStyled {
   fn transform_expression(
     &mut self,
     expression: &mut TaggedTpl,
-    css_module_identifier: Ident,
     runtime_expressions: Vec<Expr>,
     declarations: &[Declaration],
     runtime_css_variables: FxHashMap<String, Expr>,
@@ -430,12 +428,13 @@ impl YakTransform for TransformStyled {
   ) -> YakTransformResult {
     let mut arguments: Vec<ExprOrSpread> = vec![];
     if !declarations.is_empty() {
+      // As yak generates the final class name, this name can use it directly in the js code
       arguments.push(
-        Expr::Member(MemberExpr {
+        Expr::Lit(Lit::Str(Str {
           span: DUMMY_SP,
-          obj: Box::new(Expr::Ident(css_module_identifier.clone())),
-          prop: create_member_prop_from_string(&self.class_name),
-        })
+          value: self.class_name.clone().into(),
+          raw: None,
+        }))
         .into(),
       );
     }
@@ -475,7 +474,7 @@ impl YakTransform for TransformStyled {
 
   /// Get the selector for the specific styled component to be used in other expressions
   fn get_css_reference_name(&self) -> Option<String> {
-    Some(format!(".{}", self.class_name))
+    Some(format!(":global(.{})", self.class_name))
   }
 }
 
@@ -496,7 +495,7 @@ impl YakTransform for TransformKeyframes {
   fn create_css_state(&self, _previous_parser_state: Option<ParserState>) -> ParserState {
     let mut parser_state = ParserState::new();
     parser_state.current_scopes = vec![CssScope {
-      name: format!("@keyframes {}", self.animation_name),
+      name: format!("@keyframes :global({})", self.animation_name),
       scope_type: ScopeType::AtRule,
     }];
     parser_state
@@ -505,7 +504,6 @@ impl YakTransform for TransformKeyframes {
   fn transform_expression(
     &mut self,
     expression: &mut TaggedTpl,
-    css_module_identifier: Ident,
     _runtime_expressions: Vec<Expr>,
     declarations: &[Declaration],
     runtime_css_variables: FxHashMap<String, Expr>,
@@ -514,11 +512,11 @@ impl YakTransform for TransformKeyframes {
     let mut arguments: Vec<ExprOrSpread> = vec![];
     if !declarations.is_empty() {
       arguments.push(
-        Expr::Member(MemberExpr {
+        Expr::Lit(Lit::Str(Str {
           span: DUMMY_SP,
-          obj: Box::new(Expr::Ident(css_module_identifier.clone())),
-          prop: create_member_prop_from_string(&self.animation_name),
-        })
+          value: self.animation_name.clone().into(),
+          raw: None,
+        }))
         .into(),
       );
     }
@@ -548,6 +546,6 @@ impl YakTransform for TransformKeyframes {
 
   /// Get the selector for the keyframe to be used in other expressions
   fn get_css_reference_name(&self) -> Option<String> {
-    Some(self.animation_name.clone())
+    Some(format!("global({})", self.animation_name))
   }
 }
