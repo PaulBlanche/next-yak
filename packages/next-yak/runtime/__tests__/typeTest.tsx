@@ -113,6 +113,8 @@ const MergeTestErrors = () => {
     case "html prop":
       // @ts-expect-error - only valid html attribute values are allowed
       return <Button4 type="submit submit" />;
+    case "html prop2":
+      return <Button4 type="submit" />;
     case "ref":
       // @ts-expect-error - only valid html elements
       return <Button4 ref={(element: HTMLDivElement | null) => {}} />;
@@ -123,6 +125,16 @@ const MergeTestErrors = () => {
       return null;
   }
 };
+
+// Verify that a ref is not added if the component does not accept it
+const Button5 = (props: { className: string }) => (
+  <button {...props}>Hello World</button>
+);
+const Button6 = styled(Button5)``;
+<Button6
+  // @ts-expect-error - should not allow ref on a component that does not accept it
+  ref={console.log}
+/>;
 
 const CompositionOverridingAndMergingTest = () => {
   const case1 = () => {
@@ -312,4 +324,30 @@ const InferenceShouldWorkWithComplexTypes = () => {
       }
     }}
   `;
+};
+
+const WebComponentsShouldWork = () => {
+  const MyWebComponent = styled("my-web-component")<{ $primary?: boolean }>`
+    color: red;
+  `;
+
+  // @ts-expect-error - web component props should match the defined props
+  <MyWebComponent $primary={42} />;
+
+  // Should allow all valid HTML attributes
+  <MyWebComponent onClick={(e) => console.log("clicked", e.target)} />;
+
+  // Should allow refs
+  <MyWebComponent
+    $primary
+    ref={(el) => {
+      if (el) {
+        console.log(el.classList.toggle("active"));
+      }
+    }}
+  />;
+
+  <MyWebComponent $primary />;
+
+  return <MyWebComponent />;
 };

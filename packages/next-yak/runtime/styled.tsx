@@ -1,10 +1,9 @@
-import {
-  CSSInterpolation,
-  ComponentStyles,
-  css,
-  yakComponentSymbol,
-} from "./cssLiteral.js";
-import React from "react";
+import { CSSInterpolation, css, yakComponentSymbol } from "./cssLiteral.js";
+import React, {
+  HTMLAttributes,
+  HtmlHTMLAttributes,
+  SVGAttributes,
+} from "react";
 
 // the following export is not relative as "next-yak/context"
 // links to one file for react server components and
@@ -24,6 +23,8 @@ const noTheme: YakTheme = {};
  * All valid html tags
  */
 type HtmlTags = keyof React.JSX.IntrinsicElements;
+
+type CustomWebComponentTag = `${string}-${string}`;
 
 /**
  * Return type of the provided props merged with the initial props
@@ -62,7 +63,12 @@ type Attrs<
 // https://github.com/styled-components/styled-components/blob/main/packages/styled-components/src/constructors/styled.tsx
 // https://github.com/styled-components/styled-components/blob/main/packages/styled-components/src/models/StyledComponent.ts
 //
-const StyledFactory = <T,>(Component: HtmlTags | React.FunctionComponent<T>) =>
+const StyledFactory = <
+  T extends object = React.DOMAttributes<Element> &
+    React.RefAttributes<Element>,
+>(
+  Component: HtmlTags | React.FunctionComponent<T> | CustomWebComponentTag,
+) =>
   Object.assign(yakStyled(Component), {
     attrs: <
       TAttrsIn extends object = {},
@@ -96,7 +102,8 @@ const yakStyled = <
   Component:
     | React.FunctionComponent<T>
     | YakComponent<T, TAttrsIn, TAttrsOut>
-    | HtmlTags,
+    | HtmlTags
+    | string,
   attrs?: Attrs<T, TAttrsIn, TAttrsOut>,
 ) => {
   const isYakComponent =
