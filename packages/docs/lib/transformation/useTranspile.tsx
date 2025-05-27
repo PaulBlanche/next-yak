@@ -25,8 +25,8 @@ type TranspileResult = {
     component: ReactNode | null;
     error: string | null;
   };
-  transpiledMainFile: TranspiledFile;
-  transpiledAdditionalFiles: TranspiledFile[];
+  transpiledMainFile?: TranspiledFile;
+  transpiledAdditionalFiles?: TranspiledFile[];
 };
 
 export const useTranspile = (
@@ -42,22 +42,20 @@ export const useTranspile = (
 
   const workerOnMessage = useCallback(
     (event: MessageEvent<Parameters<typeof executeCode>[0] | string>) => {
-      if (typeof event.data === "string") {
-        setResult(
-          (r) =>
-            ({
-              ...r,
-              renderedMainComponent: {
-                component: r?.renderedMainComponent.component ?? null,
-                error: event.data,
-              },
-            }) as TranspileResult,
-        );
+      const eventData = event.data;
+      if (typeof eventData === "string") {
+        setResult((result) => ({
+          ...result,
+          renderedMainComponent: {
+            component: result?.renderedMainComponent.component ?? null,
+            error: eventData,
+          },
+        }));
         return;
       }
 
       try {
-        const result = executeCode(event.data, {
+        const result = executeCode(eventData, {
           react: React,
           "next-yak/internal": NextYakInternal,
           ...allFilenames.reduce(
@@ -93,16 +91,13 @@ export const useTranspile = (
           ),
         });
       } catch (error) {
-        setResult(
-          (r) =>
-            ({
-              ...r,
-              renderedMainComponent: {
-                component: r?.renderedMainComponent.component ?? null,
-                error: error instanceof Error ? error.message : String(error),
-              },
-            }) as TranspileResult,
-        );
+        setResult((result) => ({
+          ...result,
+          renderedMainComponent: {
+            component: result?.renderedMainComponent.component ?? null,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        }));
       }
     },
     [],
