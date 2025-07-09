@@ -1,4 +1,5 @@
 import type { YakTheme } from "./index.d.ts";
+import { RuntimeStyleProcessor } from "./publicStyledApi.js";
 
 export const yakComponentSymbol = Symbol("yak");
 
@@ -32,12 +33,17 @@ type CSSFunction = <TProps = {}>(
   ...values: CSSInterpolation<TProps & { theme: YakTheme }>[]
 ) => ComponentStyles<TProps>;
 
-export type PropsToClassNameFn = (props: unknown) =>
+export type NestedRuntimeStyleProcessor = (
+  props: unknown,
+  classNames: Set<string>,
+  style: React.CSSProperties,
+) =>
   | {
       className?: string;
-      style?: Record<string, string>;
+      style?: React.CSSProperties;
     }
-  | PropsToClassNameFn;
+  | void
+  | NestedRuntimeStyleProcessor;
 
 /**
  * css() runtime factory of css``
@@ -50,27 +56,35 @@ export type PropsToClassNameFn = (props: unknown) =>
  *
  * Therefore this is only an internal function only and it must be cast to any
  * before exported to the user.
+ *
+ * The internal functioning of css`` is to return a single callback function that runs all functions
+ * (or creates new ones if needed) that are passed as arguments. These functions receive the props, classNames, and style object as arguments
+ * and operate directly on the classNames and style objects.
  */
 export function css<TProps>(
   styles: TemplateStringsArray,
   ...values: CSSInterpolation<NoInfer<TProps> & { theme: YakTheme }>[]
 ): ComponentStyles<TProps>;
-export function css<TProps>(...args: Array<any>): ComponentStyles<TProps> {
-  const classNames: string[] = [];
-  const dynamicCssFunctions: PropsToClassNameFn[] = [];
+export function css<TProps>(
+  ...args: Array<any>
+): RuntimeStyleProcessor<TProps> {
+  // Normally this  could be an array of strings passed, but as we transpile the usage of css`` ourselves, we control the arguments
+  // and ensure that only the first argument is a string (class name of the non-dynamic styles)
+  let className: string | undefined;
+  const dynamicCssFunctions: NestedRuntimeStyleProcessor[] = [];
   const style: Record<string, string> = {};
   for (const arg of args as Array<string | CSSFunction | CSSStyles<any>>) {
     // A CSS-module class name which got auto generated during build from static css
     // e.g. css`color: red;`
     // compiled -> css("yak31e4")
     if (typeof arg === "string") {
-      classNames.push(arg);
+      className = arg;
     }
     // Dynamic CSS e.g.
     // css`${props => props.active && css`color: red;`}`
     // compiled -> css((props: { active: boolean }) => props.active && css("yak31e4"))
     else if (typeof arg === "function") {
-      dynamicCssFunctions.push(arg as unknown as PropsToClassNameFn);
+      dynamicCssFunctions.push(arg as unknown as NestedRuntimeStyleProcessor);
     }
     // Dynamic CSS with css variables e.g.
     // css`transform: translate(${props => props.x}, ${props => props.y});`
@@ -98,43 +112,48 @@ export function css<TProps>(...args: Array<any>): ComponentStyles<TProps> {
   }
 
   // Non Dynamic CSS
+  // This is just an optimization for the common case where there are no dynamic css functions
   if (dynamicCssFunctions.length === 0) {
-    const className = classNames.join(" ");
-    return () => ({ className, style });
+    return (_, classNames) => {
+      if (className) {
+        classNames.add(className);
+      }
+      return () => {};
+    };
   }
 
-  return (props: unknown) => {
-    const allClassNames: string[] = [...classNames];
-    const allStyles: Record<string, string> = { ...style };
-    for (let i = 0; i < dynamicCssFunctions.length; i++) {
-      unwrapProps(props, dynamicCssFunctions[i], allClassNames, allStyles);
+  return (props, classNames, allStyles) => {
+    if (className) {
+      classNames.add(className);
     }
-    return {
-      className: allClassNames.join(" "),
-      style: allStyles,
-    };
+    for (let i = 0; i < dynamicCssFunctions.length; i++) {
+      unwrapProps(props, dynamicCssFunctions[i], classNames, allStyles);
+    }
   };
 }
 
 // Dynamic CSS with runtime logic
 const unwrapProps = (
   props: unknown,
-  fn: PropsToClassNameFn,
-  classNames: string[],
-  style: Record<string, string>,
+  fn: NestedRuntimeStyleProcessor,
+  classNames: Set<string>,
+  style: React.CSSProperties,
 ) => {
-  let result = fn(props);
+  let result = fn(props, classNames, style);
   while (result) {
     if (typeof result === "function") {
-      result = result(props);
+      result = result(props, classNames, style);
       continue;
     } else if (typeof result === "object") {
       if ("className" in result && result.className) {
-        classNames.push(result.className);
+        classNames.add(result.className);
       }
       if ("style" in result && result.style) {
         for (const key in result.style) {
-          style[key] = result.style[key];
+          // This is hard for typescript to infer
+          style[key as keyof React.CSSProperties] = result.style[
+            key as keyof React.CSSProperties
+          ] as any;
         }
       }
     }

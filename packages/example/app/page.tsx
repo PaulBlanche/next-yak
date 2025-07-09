@@ -1,5 +1,5 @@
 /** @jsxImportSource next-yak */
-import { YakThemeProvider, css, styled } from "next-yak";
+import { YakThemeProvider, atoms, css, styled } from "next-yak";
 import styles from "./page.module.css";
 import { queries, colors } from "@/theme/constants.yak";
 import { Clock } from "./Clock";
@@ -125,6 +125,25 @@ const NestedConstantText = styled.span`
   color: ${tokens.colors.orange};
 `;
 
+const ToBeWrapped = styled.div<{ $primary: boolean }>`
+  ${atoms(
+    styles.green,
+    false && styles.large,
+    (_, classNames) => {
+      classNames.delete(styles.blue);
+      classNames.add(styles.yellow);
+    },
+    () => {},
+  )}
+`;
+
+const Wrap = styled(ToBeWrapped)<{ $secondary: boolean }>`
+  ${atoms((_, classNames) => {
+    classNames.delete(styles.yellow);
+    classNames.add(styles.italic);
+  })}
+`;
+
 export default function Home() {
   return (
     <YakThemeProvider>
@@ -191,6 +210,32 @@ export default function Home() {
             and this is teal
           </span>
         </p>
+        <p
+          css={atoms(styles.small, (_, __, style) => {
+            style["color"] = "black";
+          })}
+        >
+          Atoms in css props work if this is small{" "}
+          <span
+            css={css`
+              color: black;
+              ${atoms(styles.small, true && styles.red, (_, classNames) => {
+                classNames.delete(styles.red);
+                classNames.delete(styles.small);
+                classNames.add(styles.large);
+              })}
+            `}
+          >
+            and this is large
+          </span>
+        </p>
+        <Wrap
+          className={`${styles.small} ${styles.blue}`}
+          $primary={true}
+          $secondary={true}
+        >
+          Atoms in styled components work if this is small, green and italic
+        </Wrap>
         <Inputs />
       </main>
     </YakThemeProvider>

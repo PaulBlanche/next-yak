@@ -32,7 +32,7 @@ export interface StyledFn {
  */
 export interface YakComponent<T> extends React.FunctionComponent<T> {
   // This is intentionally typed to hide the internal implementation details.
-  [yakComponentSymbol]: [unknown, unknown];
+  [yakComponentSymbol]: [unknown, unknown, unknown];
 }
 
 /**
@@ -134,6 +134,15 @@ export type CustomWebComponentTag = `${string}-${string}`;
 export type FastOmit<T extends object, U extends string | number | symbol> = {
   [K in keyof T as K extends U ? never : K]: T[K];
 };
+
+/**
+ * Type of all functions that can be passed to manipulate styles
+ */
+export type RuntimeStyleProcessor<T> = (
+  props: T,
+  classNames: Set<string>,
+  style: React.CSSProperties,
+) => void;
 
 /**
  * Utility type to keep the generic API of a component while still being able to use it in a selector
