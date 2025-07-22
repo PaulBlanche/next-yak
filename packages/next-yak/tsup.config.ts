@@ -23,8 +23,8 @@ export default defineConfig([
     target: "es2022",
     outDir: "dist",
   },
-   // internal
-   {
+  // internal
+  {
     entryPoints: ["runtime/internal.ts"],
     format: ["cjs", "esm"],
     minify: false,
@@ -94,9 +94,10 @@ export default defineConfig([
   },
   // loaders
   {
-    entryPoints: [
-      "loaders/css-loader.ts",
-    ],
+    entryPoints: {
+      "cross-file-resolver": "cross-file-resolver/index.ts",
+      "css-loader": "loaders/css-loader.ts",
+    },
     format: ["esm"],
     minify: false,
     sourcemap: true,
@@ -108,7 +109,7 @@ export default defineConfig([
     noExternal: [],
     dts: true,
     platform: "node",
-    splitting: false,
+    splitting: true,
     target: "es2022",
     outDir: "dist/loaders",
   },

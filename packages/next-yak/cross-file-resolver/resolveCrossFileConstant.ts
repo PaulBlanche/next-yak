@@ -226,7 +226,7 @@ async function uncachedResolveModule(
 ): Promise<{ resolved: ResolvedModule; dependencies: string[] }> {
   const parsedModule = await context.parse(filePath);
 
-    const exports = parsedModule.exports as ResolvedExports;
+  const exports = parsedModule.exports as ResolvedExports;
 
   if (parsedModule.type !== "regular") {
     return {
@@ -237,7 +237,6 @@ async function uncachedResolveModule(
       dependencies: [],
     };
   }
-
 
   const dependencies = new Set<string>();
 
@@ -375,7 +374,7 @@ async function resolveModuleSpecifierRecursively(
   const exportName = specifiers[0];
   const exportValue = resolvedModule.exports.named[exportName];
   if (exportValue !== undefined) {
-    if (seen.has(resolvedModule.path+':' + exportName)) {
+    if (seen.has(resolvedModule.path + ":" + exportName)) {
       throw new CircularDependencyError(
         `Unable to resolve "${specifiers.join(".")}" in module "${
           resolvedModule.path
@@ -384,7 +383,7 @@ async function resolveModuleSpecifierRecursively(
       );
     }
 
-    seen.add(resolvedModule.path+':' + exportName);
+    seen.add(resolvedModule.path + ":" + exportName);
     return resolveModuleExport(
       context,
       resolvedModule.path,
@@ -420,7 +419,7 @@ async function resolveModuleSpecifierRecursively(
         seen,
       );
 
-      if (seen.has(resolvedModule.path+':*')) {
+      if (seen.has(resolvedModule.path + ":*")) {
         throw new CircularDependencyError(
           `Unable to resolve "${specifiers.join(".")}" in module "${
             resolvedModule.path
@@ -429,9 +428,9 @@ async function resolveModuleSpecifierRecursively(
         );
       }
 
-      seen.add(resolvedModule.path+':*');
+      seen.add(resolvedModule.path + ":*");
 
-      return resolved
+      return resolved;
     } catch (error) {
       // ignore resolve error, it means the specifier was not found in the
       // current module, we just have to continue the loop.
@@ -562,7 +561,8 @@ function resolveSpecifierInRecord(
 
   if (current === undefined || depth !== specifiers.length) {
     throw new ResolveError(
-      `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`, { cause:"path not found" },
+      `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`,
+      { cause: "path not found" },
     );
   }
 
@@ -575,12 +575,17 @@ function resolveSpecifierInRecord(
   }
 
   // mixins in .yak files are wrapped inside an object with a __yak key
-  if (current.type === "record" && '__yak' in current.value && current.value.__yak.type === "constant") {
+  if (
+    current.type === "record" &&
+    "__yak" in current.value &&
+    current.value.__yak.type === "constant"
+  ) {
     return { type: "mixin", value: String(current.value.__yak.value) };
   }
 
   throw new ResolveError(
-    `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`, { cause: "only string and numbers are supported" },
+    `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`,
+    { cause: "only string and numbers are supported" },
   );
 }
 
@@ -635,4 +640,4 @@ export type ResolvedExports = {
 export type ResolvedModule = {
   path: string;
   exports: ResolvedExports;
-} 
+};

@@ -3,4 +3,4 @@
 // files to define static css mixings
 //
 //
-export * as mixin from "./staticCssLiteral.js"
+export * as mixin from "./staticCssLiteral.js";
