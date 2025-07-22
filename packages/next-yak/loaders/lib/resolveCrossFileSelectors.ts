@@ -213,9 +213,7 @@ async function parseExports(sourceContents: string): Promise<ModuleExports> {
         }
       },
       ExportAllDeclaration({ node }) {
-        if (Object.keys(exports).length === 0) {
-          moduleExports.all.push(node.source.value);
-        }
+        moduleExports.all.push(node.source.value);
       },
     });
     // If we found a default export that's an identifier, look up its value
