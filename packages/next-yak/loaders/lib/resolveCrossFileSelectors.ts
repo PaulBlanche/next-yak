@@ -13,7 +13,6 @@ import type { Compilation, LoaderContext } from "webpack";
 import { YakConfigOptions } from "../../withYak/index.js";
 import { parse } from "@babel/parser";
 import traverse from "@babel/traverse";
-import * as path from "node:path";
 
 const compilationCache = new WeakMap<
   Compilation,
@@ -98,7 +97,7 @@ function getResolveContext(
   return {
     parse: (modulePath) => parseModule(parseContext, modulePath),
     resolve: async (specifier, importer) => {
-      return resolveModule(loader, specifier, path.dirname(importer));
+      return resolveModule(loader, specifier, dirname(importer));
     },
   };
 }
@@ -292,4 +291,27 @@ function parseObjectExpression(
     }
   }
   return result;
+}
+
+const DIRNAME_POSIX_REGEX =
+  /^((?:\.(?![^\/]))|(?:(?:\/?|)(?:[\s\S]*?)))(?:\/+?|)(?:(?:\.{1,2}|[^\/]+?|)(?:\.[^.\/]*|))(?:[\/]*)$/;
+const DIRNAME_WIN32_REGEX =
+  /^((?:\.(?![^\\]))|(?:(?:\\?|)(?:[\s\S]*?)))(?:\\+?|)(?:(?:\.{1,2}|[^\\]+?|)(?:\.[^.\\]*|))(?:[\\]*)$/;
+
+/**
+ * Polyfill for `node:path` method dirname.
+ * Keeps yak independent from node api (therefore executable in browser)
+ */
+function dirname(path: string) {
+  let dirname = DIRNAME_POSIX_REGEX.exec(path)?.[1];
+
+  if (!dirname) {
+    dirname = DIRNAME_WIN32_REGEX.exec(path)?.[1];
+  }
+
+  if (!dirname) {
+    throw new Error(`Can't extract dirname from ${path}`);
+  }
+
+  return dirname;
 }

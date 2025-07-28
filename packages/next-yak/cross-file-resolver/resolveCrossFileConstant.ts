@@ -6,7 +6,6 @@ import type {
   TagTemplateExport,
 } from "./parseModule.js";
 import { Cache } from "./types.js";
-import * as crypto from "node:crypto";
 import { CauseError, CircularDependencyError, ResolveError } from "./Errors.js";
 
 const yakCssImportRegex =
@@ -41,11 +40,7 @@ export async function resolveCrossFileConstant(
     return uncachedResolveCrossFileConstant(context, filePath, css);
   }
 
-  const cacheKey = crypto
-    .createHash("sha1")
-    .update(filePath)
-    .update(css)
-    .digest("hex");
+  const cacheKey = await sha1(filePath + ':' + css)
 
   const cached = context.cache.resolveCrossFileConstant.get(cacheKey);
 
@@ -582,6 +577,15 @@ function resolveSpecifierInRecord(
   throw new ResolveError(
     `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`, { cause: "only string and numbers are supported" },
   );
+}
+
+/**
+ * hex SHA-1 hash of a message using webcrypto
+ * Keeps yak independent from node api (therefore executable in browser)
+ */
+async function sha1(message:string) {
+  const resultBuffer = await globalThis.crypto.subtle.digest("SHA-1", new TextEncoder().encode(message))
+  return Array.from(new Uint8Array(resultBuffer), (byte) => byte.toString(16).padStart(2, "0")).join('')
 }
 
 export type ResolveContext = {
