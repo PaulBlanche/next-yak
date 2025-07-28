@@ -1,6 +1,6 @@
 import { type Cache } from "./types.js";
 
-export async function parseModule(context: ParseContext, modulePath: string) {
+export async function parseModule(context: ParseContext, modulePath: string): Promise<ParsedModule> {
   try {
     const isYak =
       modulePath.endsWith(".yak.ts") ||
