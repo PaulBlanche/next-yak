@@ -439,7 +439,7 @@ test('parse .yak module extendsions', async () => {
 
 })
 
-test('parse .yak module with cache multiple times extract/transform/evaluate once', async () => {
+test('parse .yak module with cache multiple times extract/transform/evaluate each time', async () => {
   const path = "/path/to/module.yak.js"
 
   let internalCache = new Map()
@@ -475,30 +475,21 @@ test('parse .yak module with cache multiple times extract/transform/evaluate onc
   const parsedModulePromise = await parseModule(parseContext, path)
   
   expect(parseContext.evaluateYakModule).toHaveBeenCalledTimes(1)
-
-  expect(cacheGet).toHaveBeenLastCalledWith(path)
-  expect(cacheGet).toHaveLastReturnedWith(undefined)
-  expect(cacheSet).toHaveBeenCalledExactlyOnceWith(path, parsedModulePromise)
+  expect(cacheGet).not.toHaveBeenCalled()
 
   // second call, cache hit
   const parsedModulePromise2 = await parseModule(parseContext, path)
 
-  assert.strictEqual(parsedModulePromise, parsedModulePromise2)
+  assert.deepEqual(parsedModulePromise, parsedModulePromise2)
 
-  expect(parseContext.evaluateYakModule).toHaveBeenCalledTimes(1)
-
-  expect(cacheGet).toHaveBeenLastCalledWith(path)
-  expect(cacheGet).toHaveLastReturnedWith(parsedModulePromise)
-  expect(cacheSet).toHaveBeenCalledTimes(1)
+  expect(parseContext.evaluateYakModule).toHaveBeenCalledTimes(2)
+  expect(cacheGet).not.toHaveBeenCalled()
 
   // third call, cache hit
   const parsedModulePromise3 = parseModule(parseContext, path)
 
-  assert.strictEqual(parsedModulePromise, await parsedModulePromise3)
+  assert.deepEqual(parsedModulePromise, await parsedModulePromise3)
 
-  expect(parseContext.evaluateYakModule).toHaveBeenCalledTimes(1)
-
-  expect(cacheGet).toHaveBeenLastCalledWith(path)
-  expect(cacheGet).toHaveLastReturnedWith(parsedModulePromise)
-  expect(cacheSet).toHaveBeenCalledTimes(1)
+  expect(parseContext.evaluateYakModule).toHaveBeenCalledTimes(3)
+  expect(cacheGet).not.toHaveBeenCalled()
 })
