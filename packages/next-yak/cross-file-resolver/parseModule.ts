@@ -2,6 +2,22 @@ import { type Cache } from "./types.js";
 
 export async function parseModule(context: ParseContext, modulePath: string) {
   try {
+    const isYak =
+      modulePath.endsWith(".yak.ts") ||
+      modulePath.endsWith(".yak.tsx") ||
+      modulePath.endsWith(".yak.js") ||
+      modulePath.endsWith(".yak.jsx");
+
+    // handle yak file by evaluating and mapping exported value to the
+    // `ModuleExport` format. This operation is not cached to always get a fresh
+    // value from thoses modules
+    if (isYak && context.evaluateYakModule) {
+      const yakModule = await context.evaluateYakModule(modulePath);
+      const yakExports = objectToModuleExport(yakModule);
+
+      return { type: "yak", exports: { importYak:false, named: yakExports, all:[] }, path: modulePath };
+    }
+
     if (context.cache?.parse === undefined) {
       return uncachedParseModule(context, modulePath);
     }
@@ -32,21 +48,6 @@ export async function uncachedParseModule(
   context: ParseContext,
   modulePath: string,
 ): Promise<ParsedModule> {
-  const isYak =
-    modulePath.endsWith(".yak.ts") ||
-    modulePath.endsWith(".yak.tsx") ||
-    modulePath.endsWith(".yak.js") ||
-    modulePath.endsWith(".yak.jsx");
-
-  // handle yak file by evaluating and mapping exported value to the
-  // `ModuleExport` format.
-  if (isYak && context.evaluateYakModule) {
-    const yakModule = await context.evaluateYakModule(modulePath);
-    const yakExports = objectToModuleExport(yakModule);
-
-    return { type: "yak", exports: { importYak:false, named: yakExports, all:[] }, path: modulePath };
-  }
-
   const exports = await context.extractExports(modulePath);
 
   // early exit if no yak import was found
