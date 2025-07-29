@@ -40,7 +40,7 @@ export async function resolveCrossFileConstant(
     return uncachedResolveCrossFileConstant(context, filePath, css);
   }
 
-  const cacheKey = await sha1(filePath + ':' + css)
+  const cacheKey = await sha1(filePath + ":" + css);
 
   const cached = context.cache.resolveCrossFileConstant.get(cacheKey);
 
@@ -115,35 +115,46 @@ export async function uncachedResolveCrossFileConstant(
         yakImports[i];
       const resolved = resolvedValues[i];
 
-      if (importKind === "selector") {
-        if (
-          resolved.type !== "styled-component" &&
-          resolved.type !== "constant"
-        ) {
-          throw new Error(
-            `Found "${
-              resolved.type
-            }" but expected a selector - did you forget a semicolon after "${specifier.join(
-              ".",
-            )}"?`,
-          );
-        }
-      }
+      let replacement: string;
 
-      const replacement =
-        resolved.type === "styled-component"
-          ? resolved.value
-          : resolved.value +
-            // resolved.value can be of two different types:
-            // - mixin:
-            //   ${mixinName};
-            // - constant:
-            //   color: ${value};
-            // For mixins the semicolon is already included in the value
-            // but for constants it has to be added manually
-            (["}", ";"].includes(String(resolved.value).trimEnd().slice(-1))
-              ? ""
-              : semicolon);
+      if (resolved.type === "unresolved-tag") {
+        // tag that could not be resolved to styled-components or mixins are
+        // interpolated to produce valid CSS with minimal impact (since we don't
+        // know what the value should actually be). For mixins (CSS rules) we
+        // interpolate an empty string, and for selectors we interpolate
+        // "undefined" (a selector that would match nothing)
+        replacement = importKind === "mixin" ? "" : "undefined";
+      } else {
+        if (importKind === "selector") {
+          if (
+            resolved.type !== "styled-component" &&
+            resolved.type !== "constant"
+          ) {
+            throw new Error(
+              `Found "${
+                resolved.type
+              }" but expected a selector - did you forget a semicolon after "${specifier.join(
+                ".",
+              )}"?`,
+            );
+          }
+        }
+
+        replacement =
+          resolved.type === "styled-component"
+            ? resolved.value
+            : resolved.value +
+              // resolved.value can be of two different types:
+              // - mixin:
+              //   ${mixinName};
+              // - constant:
+              //   color: ${value};
+              // For mixins the semicolon is already included in the value
+              // but for constants it has to be added manually
+              (["}", ";"].includes(String(resolved.value).trimEnd().slice(-1))
+                ? ""
+                : semicolon);
+      }
 
       result =
         result.slice(0, position) +
@@ -221,7 +232,7 @@ async function uncachedResolveModule(
 ): Promise<{ resolved: ResolvedModule; dependencies: string[] }> {
   const parsedModule = await context.parse(filePath);
 
-    const exports = parsedModule.exports as ResolvedExports;
+  const exports = parsedModule.exports as ResolvedExports;
 
   if (parsedModule.type !== "regular") {
     return {
@@ -232,7 +243,6 @@ async function uncachedResolveModule(
       dependencies: [],
     };
   }
-
 
   const dependencies = new Set<string>();
 
@@ -345,7 +355,6 @@ async function uncachedResolveModule(
   };
 }
 
-
 async function resolveModuleSpecifierRecursively(
   context: ResolveContext,
   resolvedModule: ResolvedModule,
@@ -355,7 +364,7 @@ async function resolveModuleSpecifierRecursively(
   const exportName = specifiers[0];
   const exportValue = resolvedModule.exports.named[exportName];
   if (exportValue !== undefined) {
-    if (seen.has(resolvedModule.path+':' + exportName)) {
+    if (seen.has(resolvedModule.path + ":" + exportName)) {
       throw new CircularDependencyError(
         `Unable to resolve "${specifiers.join(".")}" in module "${
           resolvedModule.path
@@ -364,7 +373,7 @@ async function resolveModuleSpecifierRecursively(
       );
     }
 
-    seen.add(resolvedModule.path+':' + exportName);
+    seen.add(resolvedModule.path + ":" + exportName);
     return resolveModuleExport(
       context,
       resolvedModule.path,
@@ -400,7 +409,7 @@ async function resolveModuleSpecifierRecursively(
         seen,
       );
 
-      if (seen.has(resolvedModule.path+':*')) {
+      if (seen.has(resolvedModule.path + ":*")) {
         throw new CircularDependencyError(
           `Unable to resolve "${specifiers.join(".")}" in module "${
             resolvedModule.path
@@ -409,9 +418,9 @@ async function resolveModuleSpecifierRecursively(
         );
       }
 
-      seen.add(resolvedModule.path+':*');
+      seen.add(resolvedModule.path + ":*");
 
-      return resolved
+      return resolved;
     } catch (error) {
       // ignore resolve error, it means the specifier was not found in the
       // current module, we just have to continue the loop.
@@ -500,19 +509,16 @@ async function resolveModuleExport(
       // is used in a "standard" module, the resolve logic would throw with
       // "unknown type tag-template".
       //
-      // To avoid this error, the resolve logic must handle `tag-template` as
-      // `styled-component` with no classname.
-      //
-      // This means that in the case of a user using the return of a custom tag
-      // template, instead of throwing an error during build, the "invalid"
-      // tag-template would be replaced with `""` (not very user friendly)
+      // To avoid this error, the resolve logic must handle those `tag-template`
+      // with a special type `unresolved-tag`. Those will be interpolated to
+      // valid CSS with minimal effect (to avoid CSS syntax error in the case of
+      // Nextjs server build)
       case "tag-template": {
         return {
-          type: "styled-component",
+          type: "unresolved-tag",
           from: [filePath],
           source: filePath,
           name: specifiers[specifiers.length - 1],
-          value: undefined,
         };
       }
       case "constant": {
@@ -576,7 +582,8 @@ function resolveSpecifierInRecord(
 
   if (current === undefined || depth !== specifiers.length) {
     throw new ResolveError(
-      `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`, { cause:"path not found" },
+      `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`,
+      { cause: "path not found" },
     );
   }
 
@@ -589,12 +596,17 @@ function resolveSpecifierInRecord(
   }
 
   // mixins in .yak files are wrapped inside an object with a __yak key
-  if (current.type === "record" && '__yak' in current.value && current.value.__yak.type === "constant") {
+  if (
+    current.type === "record" &&
+    "__yak" in current.value &&
+    current.value.__yak.type === "constant"
+  ) {
     return { type: "mixin", value: String(current.value.__yak.value) };
   }
 
   throw new ResolveError(
-    `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`, { cause: "only string and numbers are supported" },
+    `Unable to resolve "${specifiers.join(".")}" in object/array "${name}"`,
+    { cause: "only string and numbers are supported" },
   );
 }
 
@@ -602,9 +614,14 @@ function resolveSpecifierInRecord(
  * hex SHA-1 hash of a message using webcrypto
  * Keeps yak independent from node api (therefore executable in browser)
  */
-async function sha1(message:string) {
-  const resultBuffer = await globalThis.crypto.subtle.digest("SHA-1", new TextEncoder().encode(message))
-  return Array.from(new Uint8Array(resultBuffer), (byte) => byte.toString(16).padStart(2, "0")).join('')
+async function sha1(message: string) {
+  const resultBuffer = await globalThis.crypto.subtle.digest(
+    "SHA-1",
+    new TextEncoder().encode(message),
+  );
+  return Array.from(new Uint8Array(resultBuffer), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 type ResolvedCssImport =
@@ -613,7 +630,13 @@ type ResolvedCssImport =
       source: string;
       from: string[];
       name: string;
-      value: string | undefined;
+      value: string;
+    }
+  | {
+      type: "unresolved-tag";
+      source: string;
+      from: string[];
+      name: string;
     }
   | { type: "mixin"; source: string; from: string[]; value: string | number }
   | {
@@ -674,4 +697,4 @@ export type ResolvedExports = {
 export type ResolvedModule = {
   path: string;
   exports: ResolvedExports;
-} 
+};

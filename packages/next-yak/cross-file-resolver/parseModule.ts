@@ -1,6 +1,9 @@
 import { type Cache } from "./types.js";
 
-export async function parseModule(context: ParseContext, modulePath: string): Promise<ParsedModule> {
+export async function parseModule(
+  context: ParseContext,
+  modulePath: string,
+): Promise<ParsedModule> {
   try {
     const isYak =
       modulePath.endsWith(".yak.ts") ||
@@ -15,7 +18,11 @@ export async function parseModule(context: ParseContext, modulePath: string): Pr
       const yakModule = await context.evaluateYakModule(modulePath);
       const yakExports = objectToModuleExport(yakModule);
 
-      return { type: "yak", exports: { importYak:false, named: yakExports, all:[] }, path: modulePath };
+      return {
+        type: "yak",
+        exports: { importYak: false, named: yakExports, all: [] },
+        path: modulePath,
+      };
     }
 
     if (context.cache?.parse === undefined) {
@@ -134,7 +141,7 @@ function objectToModuleExport(object: object) {
       } else if (value && (typeof value === "object" || Array.isArray(value))) {
         return [
           key,
-          { type: "record" as const, value: objectToModuleExport(value)  },
+          { type: "record" as const, value: objectToModuleExport(value) },
         ];
       } else {
         return [key, { type: "unsupported" as const, hint: String(value) }];
